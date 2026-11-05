@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI與經濟分析 - 單元三第二講：AI 總經分析與 Streamlit 進階實作</title>
+    <style>
+        :root {
+            --primary-color: #0f172a;
+            --secondary-color: #2563eb;
+            --accent-color: #d97706;
+            --bg-color: #f8fafc;
+            --card-bg: #ffffff;
+            --text-color: #334155;
+            --border-color: #e2e8f0;
+            --code-bg: #1e293b;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            line-height: 1.75;
+            color: var(--text-color);
+            background-color: var(--bg-color);
+            margin: 0;
+            padding: 24px;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: var(--card-bg);
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+
+        h1 {
+            color: var(--primary-color);
+            border-bottom: 3px solid var(--secondary-color);
+            padding-bottom: 12px;
+            margin-top: 0;
+            font-size: 1.8rem;
+        }
+
+        h2 {
+            color: var(--secondary-color);
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 8px;
+            margin-top: 36px;
+            font-size: 1.4rem;
+        }
+
+        h3 {
+            color: var(--primary-color);
+            margin-top: 24px;
+            font-size: 1.15rem;
+        }
+
+        .step-box {
+            background-color: #f8fafc;
+            border: 1px solid var(--border-color);
+            border-left: 4px solid var(--secondary-color);
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        .warn-box {
+            background-color: #fffbeb;
+            border-left: 4px solid var(--accent-color);
+            padding: 16px 20px;
+            margin: 20px 0;
+            border-radius: 0 8px 8px 0;
+        }
+
+        pre {
+            background-color: var(--code-bg);
+            color: #f8fafc;
+            padding: 16px;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-family: "Courier New", Courier, monospace;
+            font-size: 0.9rem;
+        }
+
+        code {
+            background-color: #f1f5f9;
+            color: #0f172a;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 0.9rem;
+        }
+
+        pre code {
+            background-color: transparent;
+            color: inherit;
+            padding: 0;
+        }
+
+        footer {
+            margin-top: 50px;
+            text-align: center;
+            font-size: 0.9em;
+            color: #64748b;
+            border-top: 1px solid var(--border-color);
+            padding-top: 20px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>AI與經濟分析 - 單元三第二講：AI 總經分析與 Streamlit 進階實作</h1>
+    <p><strong>授課教師：</strong>Bin-Tzong Chie (池秉聰) 教授 | <strong>課程目標：</strong>整合 LLM 生成總經短評與動態風險警示</p>
+
+    <h2>一、 本講教學核心</h2>
+    <p>在第一講中我們成功將數據呈現在儀表板上。第二講我們將推進至<strong>「智慧化分析」</strong>：讓儀表板自動計算經濟指標利差（如殖利率倒掛），並呼叫 Google Gemini API 自動撰寫專業的總體經濟短評。</p>
+
+    <h2>二、 核心程式碼升級：結合 Gemini API 自動產出報告</h2>
+    
+    <div class="step-box">
+        <h3>1. 更新 requirements.txt</h3>
+        <p>確保專案目錄下的 <code>requirements.txt</code> 包含以下必備套件：</p>
+        <pre><code>streamlit
+pandas
+requests
+yfinance
+google-genai</code></pre>
+    </div>
+
+    <div class="step-box">
+        <h3>2. 整合 Gemini 2.5/3.8-Flash 生成即時總經短評</h3>
+        <p>在 <code>app.py</code> 中新增 AI 自動撰寫 200 字摘要的功能：</p>
+        <pre><code>import streamlit as st
+import time
+from google import genai
+
+# 從 Secrets 安全取得 API Key
+google_key = st.secrets.get("GEMINI_API_KEY")
+
+if st.button("🤖 產生 AI 總體經濟即時短評"):
+    if not google_key:
+        st.error("請先在 Streamlit Secrets 設定 GEMINI_API_KEY")
+    else:
+        with st.spinner("AI 正在分析最新 CPI 與經濟數據中..."):
+            try:
+                client = genai.Client(api_key=google_key)
+                prompt = f"""
+                你是一位專業的總體經濟分析師。請根據以下最新數據撰寫一份 200 字的繁體中文短評：
+                - 美國最新 CPI 通膨率: {cpi_val}%
+                - 10年期美債殖利率: {bond10_val}%
+                - 2年期美債殖利率: {bond2_val}%
+                重點請分析目前通膨動態與聯準會政策可能走向。
+                """
+                
+                # 採用最新穩定版 Flash 模型
+                response = client.models.generate_content(
+                    model='gemini-2.5-flash',
+                    contents=prompt,
+                )
+                
+                st.success("分析完成！")
+                st.markdown(response.text)
+                
+            except Exception as e:
+                st.warning(f"目前連線壅塞，重試中... ({e})")
+</code></pre>
+    </div>
+
+    <div class="warn-box">
+        ⚠️ <strong>學生常見排錯（Troubleshooting）：</strong>
+        <ul>
+            <li>若出現 <code>Quota Exceeded</code> 或 429 流量管制，此為免費 API 的限制，可提醒學生在程式碼中設置重試機制，或於深夜測試[span_15](start_span)[span_15](end_span)。</li>
+            <li>確認 Streamlit Cloud 的 <code>Secrets</code> 已正確設定 <code>GEMINI_API_KEY</code>[span_16](start_span)[span_16](end_span)。</li>
+        </ul>
+    </div>
+
+    <footer>
+        <p>© 2026 淡江大學經濟學系 Bin-Tzong Chie 教授 | AI與經濟分析 課程講義</p>
+    </footer>
+</div>
+
+</body>
+</html>
